@@ -3,17 +3,13 @@ from ollama import generate
 
 class PromptExtraNode:
     """
-    Node สำหรับรับข้อความจาก Prompt.swift แล้วส่งให้โมเดล Ollama gemma3:latest ประมวลผล
+    Node สำหรับรับข้อความจาก Prompt แล้วส่งให้โมเดล Ollama gemma3:latest ประมวลผล
     """
     CATEGORY = "Storyboard"
 
     @classmethod
     def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "text": ("STRING", {"default": "", "multiline": True}),
-            }
-        }
+        return {"required": {"text": ("STRING", {"default": "", "multiline": True})}}
 
     RETURN_TYPES = ("STRING",)
     RETURN_NAMES = ("text",)
@@ -21,9 +17,8 @@ class PromptExtraNode:
     OUTPUT_NODE = False
 
     def pass_text(self, text):
-        # เรียก Ollama Python library รันโมเดล
+        # เรียก Ollama Python library รันโมเดล และคืนข้อความที่ได้รับ
         resp = generate(model="gemma3:latest", prompt=text, stream=False)
-        # คืนข้อความจากผลลัพธ์
         return (resp.get("text", ""),)
 
 print("📦 prompt_extra_node module loaded")
@@ -50,14 +45,13 @@ class StoryboardNode:
 
     @classmethod
     def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "image": ("IMAGE",),
-                "label": ("STRING", {"default": "[Intro solo- Ambient, horror Waterphone Swell]", "multiline": False}),
-                "extra_text": ("STRING", {"default": "", "multiline": True}),
-            }
-        }
+        return {"required": {
+            "image": ("IMAGE",),
+            "label": ("STRING", {"default": "[Intro solo- Ambient, horror Waterphone Swell]", "multiline": False}),
+            "extra_text": ("STRING", {"default": "", "multiline": True}),
+        }}
 
+    # คืนค่าทั้ง caption, action, camera, notes, mood, dialogue, details
     RETURN_TYPES = ("STRING",)*7
     RETURN_NAMES = ("caption","action","camera","notes","mood","dialogue","details")
     FUNCTION = "generate_storyboard"
@@ -98,22 +92,23 @@ class StoryboardNode:
         m = re.search(pattern, extra_text, re.S)
         segment = m.group(1).strip() if m else extra_text.strip()
 
-        # 3) สร้าง prompt ให้ Ollama
+        # 3) สร้าง prompt ให้ Ollama ขอ JSON เท่านั้น
         prompt = (
             f"Image caption: {caption}\n"
             f"Song segment: {segment}\n\n"
-            "Generate as JSON: action, camera, notes, mood, dialogue, details"
+            "Respond ONLY with a JSON object containing these keys:"
+            " action, camera, notes, mood, dialogue, details."
         )
 
-        # 4) เรียก Ollama
+        # 4) เรียก Ollama Python API
         resp = ollama.generate(model="gemma3:latest", prompt=prompt, stream=False)
         text = resp.get("text", "{}")
         try:
             data = json.loads(text)
-        except:
+        except json.JSONDecodeError:
             data = {}
 
-        # 5) คืนทุกช่อง
+        # 5) คืนค่าทั้ง 7 ช่อง
         return (
             caption,
             data.get("action",""),

@@ -1,11 +1,15 @@
+import re
+import json
 import torch
 import numpy as np
 from PIL import Image
 from transformers import BlipProcessor, BlipForConditionalGeneration
+import ollama
 
 class StoryboardNode:
     """
-    Node สำหรับสร้าง prompt จากภาพ พร้อมข้อความเสริม
+    Node สำหรับสร้าง prompt จากภาพ พร้อมแบ่งท่อนเนื้อเพลงตาม label
+    และสร้างฟิลด์ต่าง ๆ โดยใช้ BLIP + Ollama
     """
     CATEGORY = "Storyboard"
 
@@ -14,20 +18,15 @@ class StoryboardNode:
         return {
             "required": {
                 "image": ("IMAGE",),
-                "label": ("STRING", {"default": "Scene 1", "multiline": False}),
-                "action": ("STRING", {"default": "", "multiline": True}),
-                "camera": ("STRING", {"default": "", "multiline": True}),
-                "notes": ("STRING", {"default": "", "multiline": True}),
-                "mood": ("STRING", {"default": "", "multiline": True}),
-                "dialogue": ("STRING", {"default": "", "multiline": True}),
-                "details": ("STRING", {"default": "", "multiline": True}),
+                "label": ("STRING", {"default": "[Intro solo- Ambient, horror Waterphone Swell]", "multiline": False}),
                 "extra_text": ("STRING", {"default": "", "multiline": True}),
             }
         }
 
-    RETURN_TYPES = ("STRING",)
-    RETURN_NAMES = ("caption",)
-    FUNCTION = "generate_caption"
+    # คืนค่าทั้ง caption, action, camera, notes, mood, dialogue, details
+    RETURN_TYPES = ("STRING",) * 7
+    RETURN_NAMES = ("caption", "action", "camera", "notes", "mood", "dialogue", "details")
+    FUNCTION = "generate_storyboard"
     OUTPUT_NODE = True
 
     def __init__(self):
@@ -36,75 +35,69 @@ class StoryboardNode:
 
     def _load_model(self):
         if self.processor is None or self.model is None:
-            self.processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
-            self.model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base")
-            self.model = self.model.to("cuda" if torch.cuda.is_available() else "cpu")
+            self.processor = BlipProcessor.from_pretrained(
+                "Salesforce/blip-image-captioning-base"
+            )
+            self.model = BlipForConditionalGeneration.from_pretrained(
+                "Salesforce/blip-image-captioning-base"
+            )
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+            self.model = self.model.to(device)
 
-    def generate_caption(
-        self,
-        image,
-        label,
-        action,
-        camera,
-        notes,
-        mood,
-        dialogue,
-        details,
-        extra_text,
-    ):
-        # โหลดโมเดลถ้ายังไม่โหลด
+    def generate_storyboard(self, image, label, extra_text):
+        # 1) สร้าง caption ด้วย BLIP
         self._load_model()
-
-        # แปลง image เป็น PIL Image รองรับหลากหลาย shape
+        # ปรับภาพเป็น PIL
         if isinstance(image, Image.Image):
-            pil_image = image.convert("RGB")
+            pil = image.convert("RGB")
         else:
-            # เป็น Tensor หรือ array
-            if isinstance(image, torch.Tensor):
-                arr = image.cpu().numpy()
-            elif isinstance(image, np.ndarray):
-                arr = image
-            else:
-                arr = np.array(image)
-
-            # ลดมิติจาก batch/frame ถ้ามี
+            arr = image.cpu().numpy() if isinstance(image, torch.Tensor) else np.array(image)
+            # ลดมิติ batch/frame
             while arr.ndim > 3 and arr.shape[0] == 1:
                 arr = arr[0]
-
-            # ตรวจสอบ HWC หรือ CHW
-            if arr.ndim == 3 and arr.shape[2] == 3:
-                pass
-            elif arr.ndim == 3 and arr.shape[0] == 3:
+            # CHW -> HWC
+            if arr.ndim == 3 and arr.shape[0] == 3:
                 arr = np.transpose(arr, (1, 2, 0))
-            else:
-                raise TypeError(f"Unsupported image shape: {arr.shape}")
-
-            # แปลงค่าเป็น 0-255 uint8
+            # แปลงค่าเป็น uint8
             arr = (arr * 255).clip(0, 255).astype("uint8")
-            pil_image = Image.fromarray(arr).convert("RGB")
+            pil = Image.fromarray(arr).convert("RGB")
 
-        # สร้าง caption จาก BLIP
-        inputs = self.processor(pil_image, return_tensors="pt")
+        inputs = self.processor(pil, return_tensors="pt")
         inputs = {k: v.to(self.model.device) for k, v in inputs.items()}
         out = self.model.generate(**inputs)
         caption = self.processor.decode(out[0], skip_special_tokens=True)
 
-        # สร้าง prompt เต็ม
-        parts = []
-        if extra_text:
-            parts.append(f"Extra Text: {extra_text}")
-        parts.extend([
-            f"Label: {label}",
-            f"Caption: {caption}",
-            f"Action: {action}",
-            f"Camera: {camera}",
-            f"Notes: {notes}",
-            f"Mood: {mood}",
-            f"Dialogue: {dialogue}",
-            f"Details: {details}",
-        ])
-        full_prompt = "\n".join(parts)
-        return (full_prompt,)
+        # 2) ตัด segment ตาม label
+        tag = re.escape(label.strip("[]"))
+        pattern = rf"\[{tag}\](.*?)(?=\[|\Z)"
+        m = re.search(pattern, extra_text, re.S)
+        segment = m.group(1).strip() if m else extra_text.strip()
+
+        # 3) สร้าง prompt ให้ Ollama ตอบเฉพาะ JSON
+        prompt = (
+            f"Image caption: {caption}\n"
+            f"Song segment: {segment}\n\n"
+            "Respond ONLY with a JSON object containing keys: action, camera, notes, mood, dialogue, details"
+        )
+
+        # 4) เรียก Ollama
+        resp = ollama.generate(model="gemma3:latest", prompt=prompt, stream=False)
+        text = resp.get("text", "{}")
+        try:
+            data = json.loads(text)
+        except json.JSONDecodeError:
+            data = {}
+
+        # 5) คืนค่าทุกช่อง
+        return (
+            caption,
+            data.get("action", ""),
+            data.get("camera", ""),
+            data.get("notes", ""),
+            data.get("mood", ""),
+            data.get("dialogue", ""),
+            data.get("details", ""),
+        )
 
 # ยืนยันการโหลดโมดูล
 print("📦 storyboard_node module loaded")
