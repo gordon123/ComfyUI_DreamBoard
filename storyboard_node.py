@@ -1,13 +1,22 @@
+# storyboard_node.py
+import subprocess, shutil
 import torch
 from PIL import Image
-from torchvision import transforms
 from transformers import BlipProcessor, BlipForConditionalGeneration
 
+# ฟังก์ชันช่วยเช็ค-ติดตั้ง ollama CLI และดึงโมเดล gemma3:latest
+def ensure_ollama_gemma():
+    # ติดตั้ง ollama CLI ถ้าไม่มี
+    if shutil.which("ollama") is None:
+        subprocess.run(["pip", "install", "ollama"], check=True)
+    # ดึงรายชื่อโมเดลที่มีอยู่
+    result = subprocess.run(["ollama", "list"], capture_output=True, text=True)
+    if "gemma3:latest" not in result.stdout:
+        subprocess.run(["ollama", "pull", "gemma3:latest"], check=True)
+
 class StoryboardNode:
-    # กำหนดหมวดหมู่เป็น class attribute แทน method เพื่อให้ JSON serializable
     CATEGORY = "Storyboard"
 
-    # กำหนด INPUT_TYPES เป็น class method ตามปกติ
     @classmethod
     def INPUT_TYPES(cls):
         return {
@@ -29,6 +38,8 @@ class StoryboardNode:
     OUTPUT_NODE = True
 
     def __init__(self):
+        # เตรียม Ollama+GEMMA3 ก่อนครั้งแรก
+        ensure_ollama_gemma()
         self.processor = None
         self.model = None
 
@@ -39,16 +50,13 @@ class StoryboardNode:
             self.model = self.model.to("cuda" if torch.cuda.is_available() else "cpu")
 
     def generate_caption(self, image, label, action, camera, notes, mood, dialogue, details):
-        # โหลดโมเดลเมื่อจำเป็น
         self._load_model()
-        # แปลง image array เป็น PIL
         pil_image = Image.fromarray((image * 255).astype("uint8")).convert("RGB")
         inputs = self.processor(pil_image, return_tensors="pt")
         inputs = {k: v.to(self.model.device) for k, v in inputs.items()}
         out = self.model.generate(**inputs)
         caption = self.processor.decode(out[0], skip_special_tokens=True)
 
-        # สร้าง prompt
         prompt = (
             f"Label: {label}\n"
             f"Caption: {caption}\n"
@@ -61,15 +69,7 @@ class StoryboardNode:
         )
         return (prompt,)
 
-# ข้อความเพื่อยืนยันการโหลดโมดูล
 print("📦 storyboard_node module loaded")
-
-# กำหนด mapping ให้ ComfyUI ใช้งาน
-NODE_CLASS_MAPPINGS = {
-    "StoryboardNode": StoryboardNode
-}
-
-NODE_DISPLAY_NAME_MAPPINGS = {
-    "StoryboardNode": "🎬 Storyboard Image → Prompt"
-}
+NODE_CLASS_MAPPINGS = {"StoryboardNode": StoryboardNode}
+NODE_DISPLAY_NAME_MAPPINGS = {"StoryboardNode": "🎬 Storyboard Image → Prompt"}
 print("✅ NODE_CLASS_MAPPINGS defined")
