@@ -43,7 +43,8 @@ class StoryboardNode:
     def generate_caption(self, image, label, action, camera, notes, mood, dialogue, details):
         self._load_model()
         pil_image = Image.fromarray((image * 255).astype("uint8")).convert("RGB")
-        inputs = self.processor(pil_image, return_tensors="pt").to(self.model.device)
+        inputs = self.processor(pil_image, return_tensors="pt")
+        inputs = {k: v.to(self.model.device) for k, v in inputs.items()}
         out = self.model.generate(**inputs)
         caption = self.processor.decode(out[0], skip_special_tokens=True)
 
