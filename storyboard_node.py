@@ -49,5 +49,5 @@ NODE_CLASS_MAPPINGS = {
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "StoryboardNode": "🎬 Storyboard (Image → Prompt)"
+    "StoryboardNode": "🎬 Storyboard Image → Prompt"
 }
