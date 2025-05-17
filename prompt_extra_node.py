@@ -38,8 +38,8 @@ import ollama
 
 class StoryboardNode:
     """
-    Node สำหรับสร้าง prompt จากภาพ พร้อมแบ่งท่อนเพลงและสร้างฟิลด์ต่าง ๆ
-    by BLIP + Ollama
+    Node สำหรับสร้าง prompt จากภาพ พร้อมแบ่งท่อนเนื้อเพลงตาม label
+    และสร้างฟิลด์ต่าง ๆ โดยใช้ BLIP + Ollama
     """
     CATEGORY = "Storyboard"
 
@@ -52,8 +52,8 @@ class StoryboardNode:
         }}
 
     # คืนค่าทั้ง caption, action, camera, notes, mood, dialogue, details
-    RETURN_TYPES = ("STRING",)*7
-    RETURN_NAMES = ("caption","action","camera","notes","mood","dialogue","details")
+    RETURN_TYPES = ("STRING",) * 7
+    RETURN_NAMES = ("caption", "action", "camera", "notes", "mood", "dialogue", "details")
     FUNCTION = "generate_storyboard"
     OUTPUT_NODE = True
 
@@ -78,47 +78,53 @@ class StoryboardNode:
             while arr.ndim > 3 and arr.shape[0] == 1:
                 arr = arr[0]
             if arr.ndim == 3 and arr.shape[0] == 3:
-                arr = np.transpose(arr, (1,2,0))
-            arr = (arr * 255).clip(0,255).astype("uint8")
+                arr = np.transpose(arr, (1, 2, 0))
+            arr = (arr * 255).clip(0, 255).astype("uint8")
             pil = Image.fromarray(arr).convert("RGB")
         inputs = self.processor(pil, return_tensors="pt")
-        inputs = {k:v.to(self.model.device) for k,v in inputs.items()}
+        inputs = {k: v.to(self.model.device) for k, v in inputs.items()}
         out = self.model.generate(**inputs)
         caption = self.processor.decode(out[0], skip_special_tokens=True)
 
         # 2) ตัด segment ตาม label
-        tag = re.escape(label.strip('[]'))
+        tag = re.escape(label.strip("[]"))
         pattern = rf"\[{tag}\](.*?)(?=\[|\Z)"
         m = re.search(pattern, extra_text, re.S)
-        segment = m.group(1).strip() if m else extra_text.strip()
+        # fallback ถ้าไม่เจอหรือเป็น empty
+        if m and m.group(1).strip():
+            segment = m.group(1).strip()
+        else:
+            segment = extra_text.strip() if extra_text.strip() else label.strip("[]")
 
-        # 3) สร้าง prompt ให้ Ollama ขอ JSON เท่านั้น
+        # 3) สร้าง prompt ให้ Ollama ตอบเฉพาะ JSON
         prompt = (
             f"Image caption: {caption}\n"
             f"Song segment: {segment}\n\n"
-            "Respond ONLY with a JSON object containing these keys:"
-            " action, camera, notes, mood, dialogue, details."
+            "Respond ONLY with a JSON object with keys: action, camera, notes, mood, dialogue, details."
         )
+        print(f"[DEBUG] Ollama prompt: {prompt}")
 
-        # 4) เรียก Ollama Python API
+        # 4) เรียก Ollama
         resp = ollama.generate(model="gemma3:latest", prompt=prompt, stream=False)
         text = resp.get("text", "{}")
+        print(f"[DEBUG] Ollama response: {text}")
         try:
             data = json.loads(text)
         except json.JSONDecodeError:
             data = {}
 
-        # 5) คืนค่าทั้ง 7 ช่อง
+        # 5) คืนค่าทุกช่อง
         return (
             caption,
-            data.get("action",""),
-            data.get("camera",""),
-            data.get("notes",""),
-            data.get("mood",""),
-            data.get("dialogue",""),
-            data.get("details",""),
+            data.get("action", ""),
+            data.get("camera", ""),
+            data.get("notes", ""),
+            data.get("mood", ""),
+            data.get("dialogue", ""),
+            data.get("details", ""),
         )
 
+# ยืนยันการโหลดโมดูล
 print("📦 storyboard_node module loaded")
 NODE_CLASS_MAPPINGS = {"StoryboardNode": StoryboardNode}
 NODE_DISPLAY_NAME_MAPPINGS = {"StoryboardNode": "🎬 Storyboard Image → Prompt"}
