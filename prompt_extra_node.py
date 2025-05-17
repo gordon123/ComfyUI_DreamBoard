@@ -3,7 +3,7 @@ class PromptExtraNode:
     A simple node that lets you enter arbitrary text and outputs it as a STRING.
     Appears as 'Prompt extra' in the node list.
     """
-    CATEGORY = "Prompt"
+    CATEGORY = "Storyboard"
 
     @classmethod
     def INPUT_TYPES(cls):

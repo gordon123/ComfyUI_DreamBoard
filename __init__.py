@@ -13,5 +13,5 @@ NODE_CLASS_MAPPINGS = {
 # Mapping class names to display names shown in the UI
 NODE_DISPLAY_NAME_MAPPINGS = {
     "StoryboardNode": "🎬 Storyboard Image → Prompt",
-    "PromptExtraNode": "Prompt extra",
+    "PromptExtraNode": "🎬 Prompt extra",
 }
