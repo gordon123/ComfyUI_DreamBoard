@@ -45,6 +45,8 @@ class StoryboardNode:
         prompt = f"Label: {label}\nCaption: {caption}\nAction: {action}\nCamera: {camera}\nNotes: {notes}\nMood: {mood}\nDialogue: {dialogue}\nDetails: {details}"
         return (prompt,)
 
+print("📦 storyboard_node module loaded")
+
 NODE_CLASS_MAPPINGS = {
     "StoryboardNode": StoryboardNode
 }
@@ -52,3 +54,5 @@ NODE_CLASS_MAPPINGS = {
 NODE_DISPLAY_NAME_MAPPINGS = {
     "StoryboardNode": "🎬 Storyboard Image → Prompt"
 }
+print("✅ NODE_CLASS_MAPPINGS defined")
+
