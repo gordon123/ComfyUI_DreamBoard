@@ -1,6 +1,17 @@
-from .storyboard_node import NODE_CLASS_MAPPINGS as SB_CLASS_MAPPINGS, NODE_DISPLAY_NAME_MAPPINGS as SB_DISPLAY_NAME_MAPPINGS
-from .prompt_extra_node import NODE_CLASS_MAPPINGS as PE_CLASS_MAPPINGS, NODE_DISPLAY_NAME_MAPPINGS as PE_DISPLAY_NAME_MAPPINGS
+# __init__.py
+# รวม node classes ทั้งหมดไว้ใน package นี้
 
-# รวม mappings จากทุกโมดูล
-NODE_CLASS_MAPPINGS = {**SB_CLASS_MAPPINGS, **PE_CLASS_MAPPINGS}
-NODE_DISPLAY_NAME_MAPPINGS = {**SB_DISPLAY_NAME_MAPPINGS, **PE_CLASS_MAPPINGS if False else SB_DISPLAY_NAME_MAPPINGS}
+from .storyboard_node import StoryboardNode
+from .prompt_extra_node import PromptExtraNode
+
+# Mapping class names to their implementations
+NODE_CLASS_MAPPINGS = {
+    "StoryboardNode": StoryboardNode,
+    "PromptExtraNode": PromptExtraNode,
+}
+
+# Mapping class names to display names shown in the UI
+NODE_DISPLAY_NAME_MAPPINGS = {
+    "StoryboardNode": "🎬 Storyboard Image → Prompt",
+    "PromptExtraNode": "Prompt extra",
+}
