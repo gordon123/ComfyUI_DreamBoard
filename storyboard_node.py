@@ -77,12 +77,16 @@ class StoryboardNode:
         prompt = (
             f"Image caption: {caption}\n"
             f"Song segment: {segment}\n\n"
-            "Respond ONLY with a JSON object containing keys: action, camera, notes, mood, dialogue, details"
+            "Please respond ONLY with a JSON object containing only these keys: "
+            "action, camera, notes, mood, dialogue, details. "
+            "Do not include any explanatory text or code fences."
         )
+        print(f"[DEBUG] Ollama prompt: {prompt}")
 
         # 4) เรียก Ollama
         resp = ollama.generate(model="gemma3:latest", prompt=prompt, stream=False)
         text = resp.get("text", "{}")
+        print(f"[DEBUG] Ollama response: {text}")
         try:
             data = json.loads(text)
         except json.JSONDecodeError:
