@@ -1,0 +1,15 @@
+[project]
+name = "dreamboard"
+description = "a simple prompter for video"
+version = "1.0.0"
+license = {file = "LICENSE"}
+dependencies = ["ollama>=0.7.0", "torch", "transformers", "pillow", "torchvision", "numpy"]
+
+[project.urls]
+Repository = "https://github.com/gordon123/ComfyUI_DreamBoard"
+#  Used by Comfy Registry https://comfyregistry.org
+
+[tool.comfy]
+PublisherId = ""
+DisplayName = "ComfyUI_DreamBoard"
+Icon = ""
