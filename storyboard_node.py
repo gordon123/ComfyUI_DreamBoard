@@ -1,4 +1,5 @@
 import torch
+import numpy as np
 from PIL import Image
 from transformers import BlipProcessor, BlipForConditionalGeneration
 
@@ -34,33 +35,54 @@ class StoryboardNode:
 
     def _load_model(self):
         if self.processor is None or self.model is None:
-            self.processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
-            self.model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base")
-            self.model = self.model.to("cuda" if torch.cuda.is_available() else "cpu")
+            self.processor = BlipProcessor.from_pretrained(
+                "Salesforce/blip-image-captioning-base"
+            )
+            self.model = BlipForConditionalGeneration.from_pretrained(
+                "Salesforce/blip-image-captioning-base"
+            )
+            self.model = self.model.to(
+                "cuda" if torch.cuda.is_available() else "cpu"
+            )
 
-    def generate_caption(self, image, label, action, camera, notes, mood, dialogue, details, extra_text):
+    def generate_caption(
+        self,
+        image,
+        label,
+        action,
+        camera,
+        notes,
+        mood,
+        dialogue,
+        details,
+        extra_text,
+    ):
         # โหลดโมเดลและสร้าง caption
         self._load_model()
-        pil_image = Image.fromarray((image * 255).astype("uint8")).convert("RGB")
+        # แปลง Tensor → NumPy → PIL Image
+        np_img = (image.cpu().numpy() * 255).astype("uint8")
+        pil_image = Image.fromarray(np_img).convert("RGB")
+
         inputs = self.processor(pil_image, return_tensors="pt")
         inputs = {k: v.to(self.model.device) for k, v in inputs.items()}
         out = self.model.generate(**inputs)
         caption = self.processor.decode(out[0], skip_special_tokens=True)
 
         # รวม prompt หลักกับข้อความเสริม
-        full_prompt = ''
+        prompt_parts = []
         if extra_text:
-            full_prompt += f"Extra Text: {extra_text}\n"
-        full_prompt += (
-            f"Label: {label}\n"
-            f"Caption: {caption}\n"
-            f"Action: {action}\n"
-            f"Camera: {camera}\n"
-            f"Notes: {notes}\n"
-            f"Mood: {mood}\n"
-            f"Dialogue: {dialogue}\n"
-            f"Details: {details}"
-        )
+            prompt_parts.append(f"Extra Text: {extra_text}")
+        prompt_parts.extend([
+            f"Label: {label}",
+            f"Caption: {caption}",
+            f"Action: {action}",
+            f"Camera: {camera}",
+            f"Notes: {notes}",
+            f"Mood: {mood}",
+            f"Dialogue: {dialogue}",
+            f"Details: {details}",
+        ])
+        full_prompt = "\n".join(prompt_parts)
         return (full_prompt,)
 
 # ข้อความเพื่อยืนยันการโหลดโมดูล
