@@ -1,15 +1,33 @@
-import subprocess, shutil
+import os
+import subprocess
+
+# กำหนดตำแหน่งโฟลเดอร์และ binary ของ Ollama ภายในโฟลเดอร์นี้
+BASE_DIR = os.path.dirname(__file__)
+OLLAMA_DIR = os.path.join(BASE_DIR, "ollama")
+OLLAMA_BIN = os.path.join(OLLAMA_DIR, "ollama")
 
 # ฟังก์ชันช่วยเช็ค-ติดตั้ง ollama CLI และดึงโมเดล gemma3:latest
+
 def ensure_ollama_gemma():
-    # ติดตั้ง ollama CLI ถ้าไม่มี (Linux install script)
-    if shutil.which("ollama") is None:
-        subprocess.run("curl -fsSL https://ollama.com/install/linux | sh", shell=True, check=True)
-    # ดึงรายชื่อโมเดลที่มีอยู่
-    result = subprocess.run(["ollama", "list"], capture_output=True, text=True)
-    # ดึงโมเดล gemma3:latest ถ้ายังไม่อยู่
+    # สร้างโฟลเดอร์ ollama ถ้ายังไม่มี
+    os.makedirs(OLLAMA_DIR, exist_ok=True)
+    # ถ้าไม่มีไฟล์ binary ให้ดาวน์โหลดและแตกไฟล์
+    if not os.path.isfile(OLLAMA_BIN):
+        url = (
+            "https://github.com/jmorganca/ollama/releases/latest/"
+            "download/ollama-linux-amd64.tar.gz"
+        )
+        # ดาวน์โหลดและแตกไฟล์ลงใน OLLAMA_DIR
+        subprocess.run(
+            f"curl -fsSL {url} | tar -xz -C {OLLAMA_DIR}",
+            shell=True,
+            check=True,
+        )
+    # ดึงรายชื่อโมเดล
+    result = subprocess.run([OLLAMA_BIN, "list"], capture_output=True, text=True)
+    # ถ้าไม่มี gemma3:latest ให้ pull มา
     if "gemma3:latest" not in result.stdout:
-        subprocess.run(["ollama", "pull", "gemma3:latest"], check=True)
+        subprocess.run([OLLAMA_BIN, "pull", "gemma3:latest"], check=True)
 
 class PromptExtraNode:
     CATEGORY = "Storyboard"
@@ -28,14 +46,15 @@ class PromptExtraNode:
     OUTPUT_NODE = False
 
     def __init__(self):
-        # ตรวจสอบและติดตั้ง ollama+gemma3 ครั้งแรก
+        # ตรวจสอบและติดตั้ง ollama+โมเดลครั้งแรก
         ensure_ollama_gemma()
 
     def pass_text(self, text):
-        # รัน gemma3:latest ผ่าน CLI และรับผลลัพธ์เป็นข้อความ
+        # ใช้ binary จากโฟลเดอร์ locale รัน gemma3:latest ผ่าน CLI
         proc = subprocess.run(
-            ["ollama", "run", "gemma3:latest", "--no-stream", "--prompt", text],
-            capture_output=True, text=True
+            [OLLAMA_BIN, "run", "gemma3:latest", "--no-stream", "--prompt", text],
+            capture_output=True,
+            text=True,
         )
         output = proc.stdout.strip()
         return (output,)
