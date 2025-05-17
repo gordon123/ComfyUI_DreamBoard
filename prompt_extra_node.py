@@ -1,15 +1,23 @@
 import subprocess
 import shutil
+import time
 
-# ฟังก์ชันช่วยเช็ค-ติดตั้ง ollama CLI และดึงโมเดล gemma3:latest
+# ฟังก์ชันช่วยเช็ค-ติดตั้ง ollama CLI และดึงโมเดล gemma3:latest พร้อมสตาร์ทเซิร์ฟเวอร์ถ้ายังไม่รัน
 def ensure_ollama_gemma():
-    # ติดตั้ง ollama CLI ถ้าไม่มี
+    # 1) ติดตั้ง ollama CLI ถ้าไม่มี
     if shutil.which("ollama") is None:
-        # ใช้สคริปต์ติดตั้งอย่างเป็นทางการ
-        subprocess.run("curl -fsSL https://ollama.com/install/linux | sh", shell=True, check=True)
-    # ตรวจสอบรายชื่อโมเดลที่มีอยู่
+        subprocess.run("curl -fsSL https://ollama.com/install.sh | sh", shell=True, check=True)
+    # 2) ตรวจสอบว่าเซิร์ฟเวอร์รันอยู่ (ollama list)
+    proc = subprocess.run(["ollama", "list"], capture_output=True, text=True)
+    if proc.returncode != 0 or "could not connect" in proc.stderr.lower():
+        # สตาร์ท Ollama server ใน background
+        subprocess.Popen([
+            "ollama", "serve"
+        ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        # รอสักครู่ให้เซิร์ฟเวอร์พร้อมรับคำสั่ง
+        time.sleep(3)
+    # 3) ดึงโมเดล gemma3:latest ถ้ายังไม่มี
     result = subprocess.run(["ollama", "list"], capture_output=True, text=True)
-    # ดึงโมเดล gemma3:latest ถ้ายังไม่มี
     if "gemma3:latest" not in result.stdout:
         subprocess.run(["ollama", "pull", "gemma3:latest"], check=True)
 
