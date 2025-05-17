@@ -1,20 +1,9 @@
-# storyboard_node.py
-import subprocess, shutil
 import torch
 from PIL import Image
 from transformers import BlipProcessor, BlipForConditionalGeneration
 
-# ฟังก์ชันช่วยเช็ค-ติดตั้ง ollama CLI และดึงโมเดล gemma3:latest
-def ensure_ollama_gemma():
-    # ติดตั้ง ollama CLI ถ้าไม่มี
-    if shutil.which("ollama") is None:
-        subprocess.run(["pip", "install", "ollama"], check=True)
-    # ดึงรายชื่อโมเดลที่มีอยู่
-    result = subprocess.run(["ollama", "list"], capture_output=True, text=True)
-    if "gemma3:latest" not in result.stdout:
-        subprocess.run(["ollama", "pull", "gemma3:latest"], check=True)
-
 class StoryboardNode:
+    # กำหนดหมวดหมู่เป็น class attribute แทน method เพื่อให้ JSON serializable
     CATEGORY = "Storyboard"
 
     @classmethod
@@ -29,6 +18,8 @@ class StoryboardNode:
                 "mood": ("STRING", {"default": "", "multiline": True}),
                 "dialogue": ("STRING", {"default": "", "multiline": True}),
                 "details": ("STRING", {"default": "", "multiline": True}),
+                # เพิ่ม input สำหรับข้อความเสริมจาก PromptExtraNode
+                "extra_text": ("STRING", {"default": "", "multiline": True}),
             }
         }
 
@@ -38,8 +29,6 @@ class StoryboardNode:
     OUTPUT_NODE = True
 
     def __init__(self):
-        # เตรียม Ollama+GEMMA3 ก่อนครั้งแรก
-        ensure_ollama_gemma()
         self.processor = None
         self.model = None
 
@@ -49,7 +38,8 @@ class StoryboardNode:
             self.model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base")
             self.model = self.model.to("cuda" if torch.cuda.is_available() else "cpu")
 
-    def generate_caption(self, image, label, action, camera, notes, mood, dialogue, details):
+    def generate_caption(self, image, label, action, camera, notes, mood, dialogue, details, extra_text):
+        # โหลดโมเดลและสร้าง caption
         self._load_model()
         pil_image = Image.fromarray((image * 255).astype("uint8")).convert("RGB")
         inputs = self.processor(pil_image, return_tensors="pt")
@@ -57,7 +47,11 @@ class StoryboardNode:
         out = self.model.generate(**inputs)
         caption = self.processor.decode(out[0], skip_special_tokens=True)
 
-        prompt = (
+        # รวม prompt หลักกับข้อความเสริม
+        full_prompt = ''
+        if extra_text:
+            full_prompt += f"Extra Text: {extra_text}\n"
+        full_prompt += (
             f"Label: {label}\n"
             f"Caption: {caption}\n"
             f"Action: {action}\n"
@@ -67,9 +61,17 @@ class StoryboardNode:
             f"Dialogue: {dialogue}\n"
             f"Details: {details}"
         )
-        return (prompt,)
+        return (full_prompt,)
 
+# ข้อความเพื่อยืนยันการโหลดโมดูล
 print("📦 storyboard_node module loaded")
-NODE_CLASS_MAPPINGS = {"StoryboardNode": StoryboardNode}
-NODE_DISPLAY_NAME_MAPPINGS = {"StoryboardNode": "🎬 Storyboard Image → Prompt"}
+
+# กำหนด mapping ให้ ComfyUI ใช้งาน
+NODE_CLASS_MAPPINGS = {
+    "StoryboardNode": StoryboardNode
+}
+
+NODE_DISPLAY_NAME_MAPPINGS = {
+    "StoryboardNode": "🎬 Storyboard Image → Prompt"
+}
 print("✅ NODE_CLASS_MAPPINGS defined")
